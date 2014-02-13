@@ -11,7 +11,6 @@ namespace MinecraftBorderless
 {
     public class MinecraftControl
     {
-        string targetWindowClass = "LWJGL";
         List<WindowInfo> targetList = new List<WindowInfo>();
 
         /// <summary>
@@ -156,7 +155,9 @@ namespace MinecraftBorderless
                 NativeAPIs.SetWindowPos(this.WindowHandle,
                     IntPtr.Zero,
                     windowNewPos.X, windowNewPos.Y, windowNewPos.Width, windowNewPos.Height,
-                    (uint)(NativeAPIs.Enum.SetWindowPos.SWP_NOOWNERZORDER 
+                    (uint)(NativeAPIs.Enum.SetWindowPos.SWP_NOOWNERZORDER
+                        | NativeAPIs.Enum.SetWindowPos.SWP_NOACTIVATE
+                        | NativeAPIs.Enum.SetWindowPos.SWP_SHOWWINDOW
                         | NativeAPIs.Enum.SetWindowPos.SWP_FRAMECHANGED));
 
                 // 少し待機
@@ -211,15 +212,59 @@ namespace MinecraftBorderless
         /// </summary>
         public event WindowListUpdatedEventHandler WindowListUpdated;
 
+        public string SeeMinecraftChildWindow(IntPtr hWndParent, string targetWindowClass = "LWJGL")
+        {
+            string childWindowTitle = null;
+
+            // 子ウィンドウクラス内にtargetWindowClassと同名のウィンドウクラスがあるかどうか
+            NativeAPIs.EnumChildWindows(hWndParent, new NativeAPIs.Delegate.EnumWindowsDelegate(
+                delegate(IntPtr hWnd, int lParam)
+                {
+                    StringBuilder wndClassBuffer = new StringBuilder(0x1024);
+                    if (0 != NativeAPIs.GetClassName(hWnd, wndClassBuffer, wndClassBuffer.Capacity))
+                    {
+                        if (targetWindowClass.ToUpper() == wndClassBuffer.ToString().ToUpper())
+                        {
+                            StringBuilder titleBuffer = new StringBuilder(0x1024);
+                            if (NativeAPIs.GetWindowText(hWnd, titleBuffer, titleBuffer.Capacity))
+                                childWindowTitle = titleBuffer.ToString();
+                        }
+                    }
+                    return 1;
+                }), 0);
+
+            // 「Minecraft Minecraft ***」の場合に最初のMinecraftを削除する
+            if (null != childWindowTitle && childWindowTitle.StartsWith("Minecraft Minecraft"))
+            {
+                childWindowTitle = childWindowTitle.Substring(10);
+            }
+
+            return childWindowTitle;
+        }
+
         /// <summary>
         /// マインクラフトのウィンドウを探索
         /// </summary>
-        /// <param name="targetWndClass">ウィンドウクラス名の指定</param>
+        /// <param name="targetWindowClass">ウィンドウクラス名の指定</param>
         /// <returns>発見数</returns>
-        public int ScanMinecraftWindow(string targetWndClass="LWJGL")
+        public int ScanMinecraftWindow(string targetWindowClass="LWJGL", params string[] targetParentWindowClasses)
         {
-            this.targetWindowClass = targetWndClass;
             this.targetList.Clear();
+
+            if (targetParentWindowClasses.Length == 0)
+            {
+                targetParentWindowClasses = new string[1] { "SunAwtFrame" };
+            }
+
+            // 探索の成功率をあげるためターゲットクラス名を総て大文字化しておく
+            {
+                string[] pwcTemp = targetParentWindowClasses;
+                targetParentWindowClasses = new string[pwcTemp.Length];
+
+                for (int i = 0; i < pwcTemp.Length; i++)
+                    targetParentWindowClasses[i] = pwcTemp[i].ToUpper();
+            }
+
 
             NativeAPIs.EnumWindows(new NativeAPIs.Delegate.EnumWindowsDelegate(
                 delegate(IntPtr hWnd, int lParam)
@@ -227,9 +272,23 @@ namespace MinecraftBorderless
                     // ウィンドウタイトル取得バッファ
                     StringBuilder titleBuffer = new StringBuilder(0x1024);
 
+                    {
+                        string title = null;
+                        if (NativeAPIs.GetWindowText(hWnd, titleBuffer, titleBuffer.Capacity))
+                        {
+                            title = titleBuffer.ToString();
+                        }
+
+                        StringBuilder wndClassBuffer = new StringBuilder(0x1024);
+                        if (0 != NativeAPIs.GetClassName(hWnd, wndClassBuffer, wndClassBuffer.Capacity))
+                        {
+                            //System.Diagnostics.Debug.WriteLine("WindowClass => " + wndClassBuffer.ToString() + ", Caption => " + ((null != title)?title: "(null)"));
+                        }
+                    }
+
                     // 表示されてるウィンドウのタイトルを取得しマイクラ(LWJGL)のみターゲットリストへ登録
-                    if (NativeAPIs.IsWindowVisible(hWnd) != 0 
-                        && NativeAPIs.GetWindowText(hWnd, titleBuffer, titleBuffer.Capacity) != 0)
+                    if (NativeAPIs.IsWindowVisible(hWnd) != 0
+                        && NativeAPIs.GetWindowText(hWnd, titleBuffer, titleBuffer.Capacity))
                     {
                         string wndTitle = titleBuffer.ToString();
                         int pid;
@@ -239,12 +298,27 @@ namespace MinecraftBorderless
                         StringBuilder wndClassBuffer = new StringBuilder(0x1024);
                         if (0 != NativeAPIs.GetClassName(hWnd, wndClassBuffer, wndClassBuffer.Capacity))
                         {
-                            if (this.targetWindowClass.ToUpper() == wndClassBuffer.ToString().ToUpper())
+                            // System.Diagnostics.Debug.WriteLine("WindowClass => " + wndClassBuffer.ToString() + ", Caption => " + titleBuffer.ToString());
+
+                            // ターゲットのウィンドウクラスを発見した場合
+                            if (targetWindowClass.ToUpper() == wndClassBuffer.ToString().ToUpper())
                             {
                                 if (this.IsAttached && hWnd == this.AttachedWindowInfo.WindowHandle)
                                     this.targetList.Add(this.AttachedWindowInfo);
                                 else
                                     this.targetList.Add(new WindowInfo(hWnd, proc, wndTitle));
+
+                            // 子ウィンドウ探索ターゲットに合致し、ターゲットが含まれていた場合
+                            } else if (targetParentWindowClasses.Contains(wndClassBuffer.ToString().ToUpper()))
+                            {
+                                string childWindowTitle = SeeMinecraftChildWindow(hWnd, targetWindowClass);
+                                if (null != childWindowTitle)
+                                {
+                                    if (this.IsAttached && hWnd == this.AttachedWindowInfo.WindowHandle)
+                                        this.targetList.Add(this.AttachedWindowInfo);
+                                    else
+                                        this.targetList.Add(new WindowInfo(hWnd, proc, (string.Empty != childWindowTitle)?childWindowTitle:wndTitle));
+                                }
                             }
                         }
                     }

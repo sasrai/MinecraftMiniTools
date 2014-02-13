@@ -339,12 +339,21 @@ namespace MinecraftBorderless
             string strClass, string strWindows);
 
         [DllImport("USER32.dll", CharSet = CharSet.Auto)]
-        public static extern int GetWindowText(
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetWindowText(
             IntPtr hWnd, StringBuilder lpString,
             int nMaxCount);
 
         [DllImport("user32.dll")]
-        public static extern int EnumWindows(
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool EnumWindows(
+            Delegate.EnumWindowsDelegate lpEnumFunc,
+            int lParam);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool EnumChildWindows(
+            IntPtr hWndParent,
             Delegate.EnumWindowsDelegate lpEnumFunc,
             int lParam);
 

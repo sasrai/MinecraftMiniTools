@@ -12,6 +12,7 @@ namespace MinecraftBorderless
         protected Dictionary<List<string>, CommandOptionType> cmdTypes = new Dictionary<List<string>, CommandOptionType>()
             {
                 {new List<string>(){"/w", "/windowclass", "WindowClass", "ウィンドウクラスの指定(デフォルト値:LWJGL)"}, CommandOptionType.StringArgs},
+                {new List<string>(){"/p", "/parentwindowclass", "ParentWindowClass", "親ウィンドウクラスの指定(デフォルト値:SunAwtFrame)"}, CommandOptionType.MultiStringArgs},
                 {new List<string>(){"/c", "/config", "ConfigFile", "コンフィグファイルの指定(デフォルト値:wcontrol.conf)"}, CommandOptionType.StringArgs},
                 {new List<string>(){"/r", "/runatstartup", "RunAtStartup", "起動時に最初に見つけたウィンドウへ自動アタッチ"}, CommandOptionType.NoArgs},
                 {new List<string>(){"/l", "/automaticload", "AutomaticLoad", "初回アタッチ時に自動で設定ファイルを適用"}, CommandOptionType.NoArgs},
@@ -22,7 +23,8 @@ namespace MinecraftBorderless
             NoArgs,
             IntArgs,
             BoolArgs,
-            StringArgs
+            StringArgs,
+            MultiStringArgs,
         }
         protected enum CmdMessageListIndex : int
         {
@@ -36,6 +38,7 @@ namespace MinecraftBorderless
         {
             public CommandOptionType OptionType { get; private set; }
             string value;
+            List<string> multi_value;
 
             public CommandOption()
             {
@@ -61,10 +64,19 @@ namespace MinecraftBorderless
                 this.value = value;
             }
 
-            public CommandOption(CommandOptionType type, string value)
+            public CommandOption(List<string> value)
+            {
+                this.OptionType = CommandOptionType.MultiStringArgs;
+                this.multi_value = value;
+            }
+
+            public CommandOption(CommandOptionType type, params string[] value)
             {
                 this.OptionType = type;
-                this.value = value;
+                if (type == CommandOptionType.MultiStringArgs)
+                    this.multi_value = new List<string>(value);
+                else
+                    this.value = value[0];
             }
 
             public bool GetBoolValue()
@@ -82,9 +94,21 @@ namespace MinecraftBorderless
                 return this.value;
             }
 
+            public List<string> GetMultiStringValue()
+            {
+                return this.multi_value;
+            }
+
             public override string ToString()
             {
-                return "\"" + this.OptionType + ((null != this.value) ? " => " + this.value : string.Empty) + "\"";
+                string vstr = string.Empty;
+
+                if (null != this.value)
+                    vstr = this.value;
+                else if (this.OptionType == CommandOptionType.MultiStringArgs)
+                    vstr = this.multi_value.ToString();
+
+                return "\"" + this.OptionType + ((string.Empty != vstr) ? " => " + vstr : string.Empty) + "\"";
             }
         }
         public Dictionary<string, CommandOption> Options { get; protected set; }

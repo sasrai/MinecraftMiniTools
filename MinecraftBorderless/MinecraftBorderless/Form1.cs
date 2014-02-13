@@ -18,6 +18,7 @@ namespace MinecraftBorderless
         bool RunAtOnceAutoAttach = false;
         bool RunAtOnceAutoLoad = false;
         bool RunAtOnceLoadingFile = false;
+        bool AttachInitializing = false;
 
         public MinecraftBorderlessMainForm()
         {
@@ -56,10 +57,17 @@ namespace MinecraftBorderless
             if (RunAtOnceAutoAttach && option.Options.Keys.Contains("RunAtStartup"))
             {
                 this.RunAtOnceAutoAttach = false;
-                mcControl.DetachMinecraftWindow();
-                windowList.SelectedIndex = 0;
-                windowList.Refresh();
-                attachButton_Click(null, null);
+                if (windowList.Items.Count > 0)
+                {
+                    windowList.SelectedIndex = 0;
+                    windowList.Refresh();
+                    attachButton_Click(null, null);
+                }
+                else
+                {
+                    this.RunAtOnceAutoLoad = false;
+                    this.RunAtOnceLoadingFile = false;
+                }
             }
         }
 
@@ -143,9 +151,11 @@ namespace MinecraftBorderless
                 // アタッチ処理
                 if (!mcControl.AttachMinecraftWindow((MinecraftControl.WindowInfo)windowList.SelectedItem))
                     return;
-                AttachWindowInfoUpdate();
+
+                this.AttachInitializing = true;
 
                 // アタッチ後の初期化
+                AttachWindowInfoUpdate();
                 IsAttachedWindowMoving = false;
                 attachUIPanel.Visible = true;
 
@@ -154,6 +164,7 @@ namespace MinecraftBorderless
 
                 // 監視タイマー起動
                 attachCheckTimer.Start();
+                this.AttachInitializing = false;
 
                 // 初回自動ロード設定時にはロード処理を行う
                 if (RunAtOnceAutoLoad && option.Options.Keys.Contains("AutomaticLoad"))
@@ -183,6 +194,10 @@ namespace MinecraftBorderless
             wndPosY.Text = mcControl.AttachedWindowInfo.GetWindowPos().Y.ToString();
             wndSizeW.Text = mcControl.AttachedWindowInfo.GetWindowPos().Width.ToString();
             wndSizeH.Text = mcControl.AttachedWindowInfo.GetWindowPos().Height.ToString();
+            wndPosX.Refresh();
+            wndPosY.Refresh();
+            wndSizeW.Refresh();
+            wndSizeH.Refresh();
 
             // ウィンドウ枠の状態の取得
             // 不明な場合はSizable化しちゃう
@@ -298,6 +313,9 @@ namespace MinecraftBorderless
 
         private void checkBoxTopMost_CheckedChanged(object sender, EventArgs e)
         {
+            if (this.AttachInitializing)
+                return;
+
             if (checkBoxTopMost.Checked)
             {
                 mcControl.AttachedWindowInfo.SetWindowZOrder(new IntPtr((int)NativeAPIs.Enum.HWND.HWND_TOPMOST));
@@ -310,6 +328,9 @@ namespace MinecraftBorderless
 
         private void checkBoxFrameVisible_CheckedChanged(object sender, EventArgs e)
         {
+            if (this.AttachInitializing)
+                return;
+
             checkBoxFrameVisible.Enabled = false;
             if (checkBoxFrameVisible.Checked)
             {
